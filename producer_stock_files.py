@@ -1,7 +1,6 @@
 import datetime
 import json
 import requests
-import schedule
 import time
 from config import kafkaConfiguration
 from config import alphaVantageConfiguration
@@ -9,6 +8,7 @@ from kafka import KafkaProducer
 
 
 def producer_stocks(producer):
+    print("hello from producer!")
     symbol = 'CGC'
     value = get_data(symbol)
     producer.send('stock-test', json.dumps(value).encode('utf-8'))
@@ -59,11 +59,3 @@ def get_data(symbol):
 def construct_request_uri(symbol, interval):
     window = 'compact'  # compact for last 100 data points, full for all of intraday data points
     return f'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&outputsize={window}&interval={interval}&apikey={alphaVantageConfiguration["api_key"]}'
-
-
-if __name__ == "__main__":
-    producer = KafkaProducer(bootstrap_servers=kafkaConfiguration['broker'])
-    schedule.every(20).seconds.do(producer_stocks, producer)
-    while True:
-        schedule.run_pending()
-    pass

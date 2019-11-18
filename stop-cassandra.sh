@@ -1,0 +1,1 @@
+launchctl stop homebrew.mxcl.cassandra
