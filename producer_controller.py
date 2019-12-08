@@ -2,20 +2,42 @@ import datetime
 import json
 import requests
 import time
+import os
+import fnmatch
+
 from config import kafkaConfiguration
 from config import alphaVantageConfiguration
 from kafka import KafkaProducer
 
 
-def producer_stocks(producer):
+def producer_stocks(producer, symbol):
     print("hello from producer!")
-    symbol = 'CGC'
-    value = get_data(symbol)
-    producer.send('stock-test', json.dumps(value).encode('utf-8'))
+    stock_data = get_data_by_symbol(symbol, producer)
+    producer.send('stock-test', stock_data)
+    # producer.send('stock-test', json.dumps(stock_data).encode('utf-8'))
     print("sent data at {}".format(datetime.datetime.now().timestamp()))
+    # maybe sleep(5)
+    # read share data and DMA from database
+    # plot as graph
 
 
-def get_data(symbol):
+def get_data_by_symbol(symbol, producer):
+    pattern = symbol.lower() + ".us.txt"
+    for file in os.listdir("data/Stocks"):
+        if fnmatch.fnmatch(file, pattern):
+            path = os.path.join("data/Stocks", file)
+            data = open(path, 'r')
+            # TODO read line by line here? or one payload and let consumer parse it all?
+            foo = []
+            # for _ in range(0, 3):
+                # line = data.readline()
+                # foo.append(line)
+                # producer.send('stock-test', json.dumps(line).encode('utf-8'))
+            return data.readlines()
+    return "Not found"
+
+
+def get_data_alphavantage(symbol):
     interval = '5min'
     uri = construct_request_uri(symbol, interval)
     req = requests.get(uri)

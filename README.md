@@ -4,6 +4,10 @@
 
 This entire project is built on Python 3.7. You must use Python 3.x to run this code.
 
+## Dataset
+Stock Market data as a csv file via Kaggle
+https://www.kaggle.com/borismarjanovic/price-volume-data-for-all-us-stocks-etfs/data
+
 ## To run
 Open a shell, start Zookeeper.
 `> ./start-zookeper`
