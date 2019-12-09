@@ -1,11 +1,12 @@
 import producer_controller
 import json
 import logging
+import plotly
 
 from config import kafkaConfiguration
-from flask import Flask, request
+from flask import Flask, request, render_template
 from kafka import KafkaProducer
-
+from plotly.graph_objs import Scatter, Layout
 
 def json_serializer(v):
     if v is None:
@@ -19,14 +20,22 @@ def json_serializer(v):
 
 app = Flask(__name__)
 producer = KafkaProducer(
-    bootstrap_servers=kafkaConfiguration['broker'], value_serializer=json_serializer)
+    bootstrap_servers=kafkaConfiguration['broker'],
+    value_serializer=json_serializer,
+    api_version=(0, 10, 1))
 
 
 @app.route("/")
 def hello():
-    return "Hello World!"
 
+    return render_template('index.html');
 
+def ShowData():
+    plotly.offline.plot({
+        "data": [Scatter(x=["1996-04-12", "1996-05-12", "1996-06-12", "1996-07-12"], y=[4, 3, 2, 1])],
+        "layout": Layout(title="Stock Data")
+    });
+    return "";
 @app.route("/stock")
 def teststock():
     # parse symbol off URI or passed in from text-box

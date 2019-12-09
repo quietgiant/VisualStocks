@@ -16,7 +16,7 @@ def json_deserializer(v):
 
 def consumer():
     consumer = KafkaConsumer(
-        'stock-test', value_deserializer=json_deserializer)
+        'stock-test', value_deserializer=json_deserializer,api_version=(0, 10, 1))
     for message in consumer:
         print('chugging!')
         # print('Message payload: {}\n\nMessage value: {}\n---\n'.format(message, message.value))
