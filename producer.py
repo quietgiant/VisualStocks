@@ -33,7 +33,7 @@ def get_data_by_symbol(symbol, producer):
             # producer.send('stock-test', json.dumps(line).encode('utf-8'))
             lines = data.readlines()
             data = {
-                'symbol': symbol,
+                'symbol': symbol.upper(),
                 'file-data': lines
             }
             return data

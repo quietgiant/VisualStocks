@@ -28,8 +28,9 @@ def consumer():
         symbol = message.value['symbol']
         tenDay = 0.0
         fiftyDay = 0.0
-        closePrices = []
         dates = []
+        closePrices = []
+        volumes = []
         i = 0
         print(f'Payload: \n\n{message}\n\n')
         print(f'Symbol: \n\n{symbol}\n\n')
@@ -42,10 +43,12 @@ def consumer():
             if i == 0:
                 i += 1
                 continue  # skip header line in payload
-            date = float(line[0])
-            dates.append(date)
+            date = str(line[0])
+            dates.append(transformDate(date))
             close = float(line[4])
             closePrices.append(close)
+            volume = int(line[5])
+            volumes.append(volume)
             print(f'CLOSE: {close}\n\n')
             if i < 10:
                 tenDay += close
@@ -67,18 +70,22 @@ def consumer():
         print(f'10 day moving average: {tenDay}')
         print(f'50 day moving average: {fiftyDay}')
 
-        save_daily_data(symbol, dates, closePrices, dbContext)
+        save_daily_data(symbol, dates, closePrices, volumes, dbContext)
         # save_moving_average_data(tenDay, fiftyDay, dbContext)
 
 
-def save_daily_data(symbol, dates, closePrices, dbContext):
+def save_daily_data(symbol, dates, closePrices, volumes, dbContext):
     doc = {
         'symbol': symbol,
         'dates': dates,
         'closing': closePrices,
+        'volume': volumes
     }
     collection = dbContext['daily']
-    collection.insert_one(doc)
+    if recordsExistForSymbol(symbol, collection):
+        print(f'Record already exists for symbol: {symbol}\nDid not overwrite existing data record.')
+    else:
+        collection.insert_one(doc)
 
 def save_moving_average_data(symbol, tenDay, fiftyDay, dbContext):
     doc = {
@@ -88,6 +95,18 @@ def save_moving_average_data(symbol, tenDay, fiftyDay, dbContext):
     }
     collection = dbContext['moving_average']
     collection.insert_one(doc)
+
+
+def recordsExistForSymbol(symbol, collection):
+    return collection.count_documents({'symbol': { "$eq": symbol}}) > 0
+
+def transformDate(date):
+    # input format: YYYY-MM-DD
+    # output format: MM-DD-YYYY
+    year = date[:4]
+    month = date[5:-3]
+    day = date[-2:]
+    return str(month + '-' + day + '-' + year)
 
 
 if __name__ == "__main__":
