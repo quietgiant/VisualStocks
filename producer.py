@@ -33,6 +33,9 @@ def get_data_by_symbol(symbol, producer):
                 # line = data.readline()
                 # foo.append(line)
                 # producer.send('stock-test', json.dumps(line).encode('utf-8'))
+            data = {
+                'symbol': symbol
+            }
             return data.readlines()
     return "Not found"
 

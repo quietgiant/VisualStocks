@@ -1,7 +1,10 @@
 import json
 import logging
+import pymongo
 
+from config import MongoConfiguration, KafkaConfiguration
 from kafka import KafkaConsumer
+from pymongo import MongoClient
 
 
 def json_deserializer(v):
@@ -15,25 +18,29 @@ def json_deserializer(v):
 
 
 def consumer():
-    consumer = KafkaConsumer(
-        'stock-test', value_deserializer=json_deserializer,api_version=(0, 10, 1))
+    print("Consumer started...")
+    consumer = KafkaConsumer(KafkaConfiguration['topic_name'], value_deserializer=json_deserializer)
+    cluster = MongoClient(MongoConfiguration['connectionString'])
+    dbContext = cluster['stocks']
     for message in consumer:
-        print('chugging!')
         # print('Message payload: {}\n\nMessage value: {}\n---\n'.format(message, message.value))
         # compute daily moving average
+        symbol = message.value['symbol']
         tenDay = 0.0
         fiftyDay = 0.0
         i = 0
         print(f'Payload: \n\n{message}\n\n')
+        print(f'Symbol: \n\n{symbol}\n\n')
         print(f'Value(size = {len(message.value)}): \n\n{message.value}\n\n')
-        for dailyData in message.value:
+        dailyData = message.value['file-data']
+        for daily in dailyData:
             # ty = type(dailyData)
             # print(f'value: {dailyData}\ntype: {ty}\n\n')
-            dailyData = dailyData.split(',')
+            line = daily.split(',')
             if i == 0:
                 i += 1
                 continue  # skip header line in payload
-            close = float(dailyData[4])
+            close = float(line[4])
             print(f'CLOSE: {close}\n\n')
             if i < 10:
                 tenDay += close
@@ -54,7 +61,27 @@ def consumer():
             fiftyDay = fiftyDay / (i - 1)
         print(f'10 day moving average: {tenDay}')
         print(f'50 day moving average: {fiftyDay}')
-        # persist share data, DMA
+
+        save_daily_data(symbol, dailyData, dbContext)
+        # save_moving_average_data(tenDay, fiftyDay, dbContext)
+
+
+def save_daily_data(symbol, dailyData, dbContext):
+    doc = {
+        'symbol': symbol,
+        'data': dailyData,
+    }
+    collection = dbContext['daily']
+    collection.insert_one(doc)
+
+def save_moving_average_data(symbol, tenDay, fiftyDay, dbContext):
+    doc = {
+        'symbol': symbol,
+        'ten-day': tenDay, 
+        'fifty-day': fiftyDay,
+    }
+    collection = dbContext['moving_average']
+    collection.insert_one(doc)
 
 
 if __name__ == "__main__":
