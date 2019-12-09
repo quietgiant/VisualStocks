@@ -28,6 +28,8 @@ def consumer():
         symbol = message.value['symbol']
         tenDay = 0.0
         fiftyDay = 0.0
+        closePrices = []
+        dates = []
         i = 0
         print(f'Payload: \n\n{message}\n\n')
         print(f'Symbol: \n\n{symbol}\n\n')
@@ -40,7 +42,10 @@ def consumer():
             if i == 0:
                 i += 1
                 continue  # skip header line in payload
+            date = float(line[0])
+            dates.append(date)
             close = float(line[4])
+            closePrices.append(close)
             print(f'CLOSE: {close}\n\n')
             if i < 10:
                 tenDay += close
@@ -62,14 +67,15 @@ def consumer():
         print(f'10 day moving average: {tenDay}')
         print(f'50 day moving average: {fiftyDay}')
 
-        save_daily_data(symbol, dailyData, dbContext)
+        save_daily_data(symbol, dates, closePrices, dbContext)
         # save_moving_average_data(tenDay, fiftyDay, dbContext)
 
 
-def save_daily_data(symbol, dailyData, dbContext):
+def save_daily_data(symbol, dates, closePrices, dbContext):
     doc = {
         'symbol': symbol,
-        'data': dailyData,
+        'dates': dates,
+        'closing': closePrices,
     }
     collection = dbContext['daily']
     collection.insert_one(doc)
