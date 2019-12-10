@@ -13,11 +13,7 @@ def emit_stock_data(producer, symbol):
     print("Producer starting...")
     stock_data = get_data_by_symbol(symbol, producer)
     producer.send(KafkaConfiguration['topic_name'], stock_data)
-    # producer.send('stock-test', json.dumps(stock_data).encode('utf-8'))
     print("sent data at {}".format(datetime.datetime.now().timestamp()))
-    # maybe sleep(5)
-    # read share data and DMA from database
-    # plot as graph
 
 
 def get_data_by_symbol(symbol, producer):

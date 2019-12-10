@@ -24,34 +24,18 @@
         </h2>
     </div>
 
-    <div>
-        <form >
+    <div class="input-entry">
+        <form id="query-args" action="{{ url_for('chart') }}">
           Stock Symbol:<br>
-          <input type="text" name="stockSymbol" value="">
+          <input type="text" name="symbol" value="">
           <br>
           Query Days from today:<br>
-          <input type="number" name="DateRange" min="1" >
+          <input type="number" name="range" min="1" >
           <br><br>
           <input type="submit" value="Submit">
         </form>
       </div>
  
-    <div id="chart" class="chart"></div>
- 
 </body>
- 
-    <!-- D3.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
-    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
-    <!-- Plotly.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/1.33.1/plotly-basic.js"></script>
- 
-    <script type="text/javascript">
-         
-        var graphs = {{graphJSON | safe}};
-
-        Plotly.plot('chart',graphs,{});        
- 
-    </script>
  
 </html>

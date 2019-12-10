@@ -23,82 +23,111 @@ def consumer():
     cluster = MongoClient(MongoConfiguration['connectionString'])
     dbContext = cluster['stocks']
     for message in consumer:
-        # print('Message payload: {}\n\nMessage value: {}\n---\n'.format(message, message.value))
-        # compute daily moving average
-        symbol = message.value['symbol']
-        tenDay = 0.0
-        fiftyDay = 0.0
-        dates = []
-        closePrices = []
-        volumes = []
-        i = 0
+        print('Message received by consumer...')
         print(f'Payload: \n\n{message}\n\n')
-        print(f'Symbol: \n\n{symbol}\n\n')
         print(f'Value(size = {len(message.value)}): \n\n{message.value}\n\n')
-        dailyData = message.value['file-data']
-        for daily in dailyData:
-            # ty = type(dailyData)
-            # print(f'value: {dailyData}\ntype: {ty}\n\n')
-            line = daily.split(',')
-            if i == 0:
-                i += 1
-                continue  # skip header line in payload
-            date = str(line[0])
-            dates.append(transformDate(date))
-            close = float(line[4])
-            closePrices.append(close)
-            volume = int(line[5])
-            volumes.append(volume)
-            print(f'CLOSE: {close}\n\n')
-            if i < 10:
-                tenDay += close
-            if i < 50:
-                fiftyDay += close
-            else:
-                break
-            i += 1
+        symbol = message.value['symbol']
+        dailyData = message.value['file-data'][1:] # skip the header line in payload
 
-        if i >= 10:
-            tenDay = tenDay / 10
-        else:
-            tenDay = tenDay / (i - 1)
+        # get the required data
+        dates, closePrices, volumes = parseDailyData(dailyData)
 
-        if i >= 50:
-            fiftyDay = fiftyDay / 50
-        else:
-            fiftyDay = fiftyDay / (i - 1)
-        print(f'10 day moving average: {tenDay}')
-        print(f'50 day moving average: {fiftyDay}')
+        # data processing
+        tenDayMovingAverageDates, tenDayAverages = calculateTenDayMovingAverages(dates, closePrices)
+        fiftyDayMovingAverageDates, fiftyDayAverages = calculateFiftyDayMovingAverages(dates, closePrices)
+        print(f'Symbol: \n\n{symbol}\n\n')
+        print(f'10 day moving average: {tenDayAverages}')
+        print(f'50 day moving average: {fiftyDayAverages}')
 
+        # persist data
         save_daily_data(symbol, dates, closePrices, volumes, dbContext)
-        # save_moving_average_data(tenDay, fiftyDay, dbContext)
+        save_moving_average_data(symbol, tenDayMovingAverageDates, fiftyDayMovingAverageDates, tenDayAverages, fiftyDayAverages, dbContext)
+
+
+def parseDailyData(dailyData):
+    dates = []
+    closePrices = []
+    volumes = []
+    for daily in dailyData:
+        line = daily.split(',')
+        date = str(line[0])
+        dates.append(date)
+        close = float(line[4])
+        closePrices.append(close)
+        volume = int(line[5])
+        volumes.append(volume)
+    return dates, closePrices, volumes
+
+
+def calculateTenDayMovingAverages(dates, closePrices):
+    days = 10
+    periods = len(dates) - days
+    tenDayMovingAverages = []
+    movingAverageDates = []
+    for i in range(0, periods):
+        indexStart = i + 1
+        indexEnd = i + days + 1
+        foo = closePrices[indexStart:indexEnd]
+        result = sum(foo) / days
+        print(f'10 day moving average result ({i}): {result}')
+        movingAverageDates.append(dates[-indexStart])
+        tenDayMovingAverages.append(result)
+    return movingAverageDates, tenDayMovingAverages
+
+
+def calculateFiftyDayMovingAverages(dates, closePrices):
+    days = 50
+    periods = len(dates) - days
+    fiftyDayMovingAverages = []
+    movingAverageDates = []
+    for i in range(0, periods):
+        indexStart = i + 1
+        indexEnd = i + days + 1
+        foo = closePrices[indexStart:indexEnd]
+        result = sum(foo) / days
+        print(f'50 day moving average result ({i}): {result}')
+        movingAverageDates.append(dates[-indexStart])
+        fiftyDayMovingAverages.append(result)
+    return movingAverageDates, fiftyDayMovingAverages
 
 
 def save_daily_data(symbol, dates, closePrices, volumes, dbContext):
-    doc = {
-        'symbol': symbol,
-        'dates': dates,
-        'closing': closePrices,
-        'volume': volumes
-    }
     collection = dbContext['daily']
-    if recordsExistForSymbol(symbol, collection):
-        print(f'Record already exists for symbol: {symbol}\nDid not overwrite existing data record.')
+    if recordExistsForSymbol(symbol, collection):
+        print(f'Daily data record already exists for symbol: {symbol}\nDid not overwrite existing data record.')
     else:
+        doc = {
+            'symbol': symbol,
+            'dates': dates,
+            'closing': closePrices,
+            'volume': volumes
+        }
         collection.insert_one(doc)
+        print(f'Successfully wrote daily data for symbol {symbol}')
+    
 
-def save_moving_average_data(symbol, tenDay, fiftyDay, dbContext):
-    doc = {
-        'symbol': symbol,
-        'ten-day': tenDay, 
-        'fifty-day': fiftyDay,
-    }
-    collection = dbContext['moving_average']
-    collection.insert_one(doc)
+def save_moving_average_data(symbol, tenDayDates, fiftyDayDates, tenDay, fiftyDay, dbContext):
+    collection = dbContext['moving-average']
+    if recordExistsForSymbol(symbol, collection):
+        print(f'Moving Average data record already exists for symbol: {symbol}\nDid not overwrite existing data record.')
+    else:
+        tenDayDates.reverse()
+        fiftyDayDates.reverse()
+        doc = {
+            'symbol': symbol,
+            'ten-day-dates': tenDayDates,
+            'fifty-day-dates': fiftyDayDates,
+            'ten-day-closing': tenDay, 
+            'fifty-day-closing': fiftyDay,
+        }
+        collection = dbContext['moving-average']
+        collection.insert_one(doc)
+        print(f'Successfully wrote moving average data for symbol {symbol}')
 
 
-def recordsExistForSymbol(symbol, collection):
+def recordExistsForSymbol(symbol, collection):
     return collection.count_documents({'symbol': { "$eq": symbol}}) > 0
+
 
 def transformDate(date):
     # input format: YYYY-MM-DD

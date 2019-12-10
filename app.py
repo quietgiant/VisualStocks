@@ -1,15 +1,17 @@
-import producer
 import json
 import logging
+import numpy as np
 import plotly
 import plotly.plotly as py
 import plotly.graph_objs as go
-import numpy as np
+import producer
+import time
 
-from config import KafkaConfiguration
+from config import MongoConfiguration, KafkaConfiguration
 from flask import Flask, request, render_template
 from kafka import KafkaProducer
-from plotly.graph_objs import Scatter, Layout
+from plotly.graph_objs import Scatter, Layout, Bar
+from pymongo import MongoClient
 
 
 def json_serializer(v):
@@ -26,7 +28,10 @@ app = Flask(__name__)
 kafka_producer = KafkaProducer(
     bootstrap_servers=KafkaConfiguration['broker'],
     value_serializer=json_serializer,
-    api_version=(0, 10, 1))
+    api_version=(0, 10, 1)
+    )
+cluster = MongoClient(MongoConfiguration['connectionString'])
+dbContext = cluster['stocks']
 
 
 @app.route("/")
@@ -35,39 +40,113 @@ def hello():
 
 
 @app.route('/chart')
-def line():
-    count = request.args.get('DateRange')
-    if (count is None):
-        count = 10
+def chart():
+    dailyData = None
+    dailyCollection = dbContext['daily']
+    movingAverageData = None
+    movingAverageCollection = dbContext['moving-average']
+    symbol = getSymbolFromUri(request.args.get('symbol'))
+    if (symbol == ""):
+        return render_template('index.html')
+    rangeInDays = getRangeFromUri(request.args.get('range'))
+
+    symbolExists = recordForSymbolExists(symbol, dailyCollection, movingAverageCollection)
+    if symbolExists:
+        dailyData = getDailyData(symbol, dailyCollection)
+        movingAverageData = getMovingAverageData(symbol, movingAverageCollection)
     else:
-        count = int(count)
-    foo = int(count * 2)
-    xScale = np.linspace(0, foo)
-    yScale = np.random.randn(count)
-    yScale2 = np.random.randn(count)
- 
-    # Create a trace
-    stock_chart = go.Scatter(
-        x = ["1-20-1995", "2-20-1995", "3-20-1995"],
-        y = [10, 20, 30]
+        print(f"Requesting producer to emit data for symbol: {symbol}")
+        producer.emit_stock_data(kafka_producer, symbol)
+    
+    while (dailyData is None or movingAverageData is None):
+        print('Waiting for consumer to finish write before querying data...')
+        time.sleep(1)
+        dailyData = getDailyData(symbol, dailyCollection)  
+        movingAverageData = getMovingAverageData(symbol, movingAverageCollection)
+
+    chartJSON = generateGraphs(dailyData, movingAverageData, rangeInDays)
+    shareRange = calculatePriceRangeFormat(dailyData)
+    return render_template('chart.html', chartJSON=chartJSON, symbol=symbol, range=rangeInDays, priceRangeFormat=shareRange)
+
+
+def generateGraphs(dailyData, movingAverageData, rangeInDays):
+    stock_chart = generateLineChart(dailyData, rangeInDays)
+    ten_day_moving_average = generateTenDayMovingAverageChart(movingAverageData, rangeInDays)
+    fifty_day_moving_average = generateFiftyDayMovingAverageChart(movingAverageData, rangeInDays)
+    volume_graph = generateBarChart(dailyData, rangeInDays)
+    charts = [stock_chart, ten_day_moving_average, fifty_day_moving_average]#, volume_graph]
+    return json.dumps(charts, cls=plotly.utils.PlotlyJSONEncoder)
+
+
+def generateLineChart(dailyData, rangeInDays):
+    xValues = dailyData['dates'][-rangeInDays:]
+    yValues = dailyData['closing'][-rangeInDays:]
+    print(f'X: {xValues}')
+    print(f'Y: {yValues}')
+    return go.Scatter(
+        x = xValues,
+        y = yValues,
+        name = dailyData['symbol']
     )
 
-    volume_graph = go.Bar(
-        x=[0, 1, 2, 3, 4, 5],
-        y=[1, 0.5, 0.7, -1.2, 0.3, 0.4]
+
+def generateTenDayMovingAverageChart(movingAverageData, rangeInDays):
+    xValues = movingAverageData['ten-day-dates'][-rangeInDays:]
+    yValues = movingAverageData['ten-day-closing'][-rangeInDays:]
+    return go.Scatter(
+        x = xValues,
+        y = yValues,
+        name = "10 Period SMA"
     )
 
-    data = [stock_chart]
-    graphJSON = json.dumps(data, cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('index.html', graphJSON=graphJSON)
+
+def generateFiftyDayMovingAverageChart(movingAverageData, rangeInDays):
+    xValues = movingAverageData['fifty-day-dates'][-rangeInDays:]
+    yValues = movingAverageData['fifty-day-closing'][-rangeInDays:]
+    return go.Scatter(
+        x = xValues,
+        y = yValues,
+        name = "50 Period SMA"
+    )
 
 
-@app.route("/stock")
-def teststock():
-    # parse symbol off URI or passed in from text-box
-    symbol = request.args.get('symbol')
-    producer.emit_stock_data(kafka_producer, symbol)
-    return f"Requesting producer to emit data for symbol: {symbol}"
+def generateBarChart(dailyData, rangeInDays):
+    xValues = dailyData['dates'][-rangeInDays:]
+    yValues = dailyData['closing'][-rangeInDays:]
+    return go.Scatter(
+        x = xValues,
+        y = yValues
+    )
+
+
+def calculatePriceRangeFormat(dailyData):
+    minPrice = min(dailyData['closing'])
+    maxPrice = max(dailyData['closing'])
+    return [(minPrice * 0.90), (maxPrice * 1.1)]
+
+
+def getDailyData(symbol, dailyCollection):
+    return dailyCollection.find_one({'symbol': { "$eq": symbol}})
+
+
+def getMovingAverageData(symbol, movingAveragesCollection):
+    return movingAveragesCollection.find_one({'symbol': { "$eq": symbol}})
+
+
+def recordForSymbolExists(symbol, dailyCollection, movingAverageCollection):
+    return dailyCollection.count_documents({'symbol': { "$eq": symbol}}) > 0
+
+
+def getRangeFromUri(rangeQueryParameter):
+    if (rangeQueryParameter is None):
+        return 180
+    return int(rangeQueryParameter)
+
+
+def getSymbolFromUri(symbolQueryParameter):
+    if (symbolQueryParameter is None):
+        return ''
+    return str(symbolQueryParameter).upper()
 
 
 if __name__ == "__main__":

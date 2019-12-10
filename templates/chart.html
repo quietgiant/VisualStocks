@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+ 
+<head>
+    <style type="text/css">
+        .header{
+            text-align: center;
+            background-color: rgb(136, 185, 229);
+            height: 70px;
+            line-height: 70px;
+        }
+        .chart{
+            margin-top: 30px;
+            text-align: center;
+        }
+    </style>
+</head>
+ 
+<body>
+ 
+    <div class="header">
+        <h2>
+            {{ symbol }} - Chart ({{ range }} days)
+        </h2>
+    </div>
+
+    <div id="chart" class="chart"></div>
+ 
+</body>
+ 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/1.33.1/plotly-basic.js"></script>
+ 
+    <script type="text/javascript">
+        var charts = {{chartJSON | safe}};
+        var range = {{range | safe}};
+        var priceRangeFormat = {{priceRangeFormat | safe}};
+        var xTicks = range;
+        if (range >= 50) {
+            xTicks = 20
+        }
+        var layout = {
+            xaxis: {
+                title: 'Date',
+                showgrid: false,
+                nticks: xTicks
+            },
+            yaxis: {
+                title: 'Share Price ($ USD)',
+                range: priceRangeFormat
+            }
+        };
+        Plotly.plot('chart', charts, layout);        
+    </script>
+ 
+</html>
